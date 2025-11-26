@@ -1,0 +1,16 @@
+Environment variables loaded from .env
+Prisma schema loaded from prisma\schema.prisma
+Error: Prisma schema validation - (get-dmmf wasm)
+Error code: P1012
+[1;91merror[0m: [1mError validating field `deliveryMan` in model `CreditRecovery`: The relation field `deliveryMan` on model `CreditRecovery` is missing an opposite relation field on the model `User`. Either run `prisma format` or add it manually.[0m
+  [1;94m-->[0m  [4mprisma\schema.prisma:339[0m
+[1;94m   | [0m
+[1;94m338 | [0m  customer        Customer      @relation(fields: [customerId], references: [id])
+[1;94m339 | [0m  [1;91mdeliveryMan     User          @relation(fields: [deliveryManId], references: [id])[0m
+[1;94m340 | [0m  summary         SalesSummary? @relation(fields: [summaryId], references: [id])
+[1;94m   | [0m
+
+Validation Error Count: 1
+[Context: getDmmf]
+
+Prisma CLI Version : 5.22.0

@@ -1,0 +1,207 @@
+Good. Dropping PHP was the right call.
+
+Everything we agreed on **business-wise** stays exactly the same:
+same ERD, same MySQL tables, same KPIs, same flows.
+Only the **backend stack** changes to **Node.js + React + MySQL with JWT**.
+
+---
+
+## 1️⃣ Backend Tech Stack (Final)
+
+**Backend:**
+
+* Node.js (LTS)
+* TypeScript
+* Express.js (HTTP server)
+* MySQL (db)
+* Query layer: pick ONE (my recommendation → Prisma)
+
+  * Option A: **Prisma** ORM (fast to ship, type-safe)
+  * Option B: Knex + raw SQL (if you want tight control)
+* Auth: `jsonwebtoken` (access + refresh tokens)
+* Validation: `zod` or `joi`
+* Security: `helmet`, `cors`, `express-rate-limit`
+* Logging: `morgan` or `pino`
+
+**Frontend stays React SPA** exactly as I described earlier.
+
+---
+
+## 2️⃣ Node Backend Folder Structure
+
+Use a modular structure, not some spaghetti `/routes` dump.
+
+```text
+backend/
+  src/
+    app.ts              // express app setup
+    server.ts           // start server
+    config/
+      env.ts
+      db.ts             // MySQL/Prisma init
+      jwt.ts
+    core/
+      HttpError.ts
+      errorHandler.ts
+      authMiddleware.ts
+      roleMiddleware.ts
+    modules/
+      auth/
+        auth.controller.ts
+        auth.service.ts
+        auth.routes.ts
+      users/
+        user.model.ts
+        user.controller.ts
+        user.service.ts
+        user.routes.ts
+      products/
+        product.model.ts
+        product.controller.ts
+        product.service.ts
+        product.routes.ts
+      inventory/
+        stockLedger.model.ts
+        inventory.service.ts
+      warehouse/
+        warehouse.controller.ts
+        warehouse.service.ts
+        warehouse.routes.ts
+      invoices/
+        invoice.model.ts
+        invoice.controller.ts
+        invoice.service.ts
+        invoice.routes.ts
+      summaries/
+        summary.model.ts
+        summary.controller.ts
+        summary.service.ts
+        summary.routes.ts
+      credit/
+        creditRecovery.model.ts
+        creditRecovery.controller.ts
+        creditRecovery.service.ts
+        creditRecovery.routes.ts
+      dashboard/
+        dashboard.controller.ts
+        dashboard.service.ts
+        dashboard.routes.ts
+    routes/
+      index.ts           // mounts all module routes under /api
+    utils/
+      password.ts        // hash/compare (bcrypt)
+      date.ts
+      permissions.ts
+  prisma/ or migrations/ // if you use Prisma or Knex
+  package.json
+  tsconfig.json
+```
+
+`app.ts` wires:
+
+* JSON body parsing
+* CORS
+* helmet
+* `/api` router
+* 404 + error handler
+
+`authMiddleware` verifies access token and attaches `req.user`.
+`roleMiddleware(['Admin','Manager'])` enforces permissions per route.
+
+---
+
+## 3️⃣ JWT Flow in Node (Concrete)
+
+**Login route (`POST /api/auth/login`):**
+
+1. Check email/password.
+2. If valid:
+
+   * Issue `accessToken` (short-lived, e.g. 15–30 min).
+   * Issue `refreshToken` (longer, stored in `refresh_tokens` table).
+3. Return `{ accessToken, refreshToken, user }`.
+
+**Refresh route (`POST /api/auth/refresh`):**
+
+* Verify refresh token, check DB not revoked, issue new pair.
+
+**Middleware skeleton:**
+
+```ts
+// core/authMiddleware.ts
+import jwt from 'jsonwebtoken';
+import { Request, Response, NextFunction } from 'express';
+
+export interface AuthUser {
+  id: number;
+  role: string;
+}
+
+export function authMiddleware(
+  req: Request & { user?: AuthUser },
+  res: Response,
+  next: NextFunction
+) {
+  const header = req.headers.authorization;
+  if (!header || !header.startsWith('Bearer ')) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
+  const token = header.substring(7);
+  try {
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET!) as AuthUser;
+    req.user = payload;
+    next();
+  } catch {
+    return res.status(401).json({ message: 'Invalid or expired token' });
+  }
+}
+```
+
+```ts
+// core/roleMiddleware.ts
+import { Request, Response, NextFunction } from 'express';
+import { AuthUser } from './authMiddleware';
+
+export const requireRole =
+  (roles: string[]) =>
+  (req: Request & { user?: AuthUser }, res: Response, next: NextFunction) => {
+    if (!req.user) return res.status(401).json({ message: 'Unauthorized' });
+    if (!roles.includes(req.user.role))
+      return res.status(403).json({ message: 'Forbidden' });
+    next();
+  };
+```
+
+Apply to routes like:
+
+```ts
+router.post(
+  '/products',
+  authMiddleware,
+  requireRole(['Admin', 'Manager']),
+  productController.create
+);
+```
+
+---
+
+## 4️⃣ API Endpoints (Same as Before, Just Node)
+
+All HTTP endpoints we defined for the PHP API **stay identical**:
+
+* `/api/auth/*`
+* `/api/users/*`
+* `/api/products/*`
+* `/api/warehouse/*`
+* `/api/invoices/*`
+* `/api/sales-summaries/*`
+* `/api/credit-recoveries/*`
+* `/api/dashboard/overview`
+
+The **business rules, stock logic, credit logic, and KPIs** are unchanged and still follow the PDF spec and our decisions. 
+
+Only difference: they’re now implemented in Node controllers/services instead of PHP controllers.
+
+---
+
